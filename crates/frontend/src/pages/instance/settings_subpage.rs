@@ -872,7 +872,7 @@ impl Render for InstanceSettingsSubpage {
             .size_full()
             .child(crate::labelled(
                 "Instance Folder",
-                Button::new("relocate").icon(PandoraIcon::Folder).child(self.instance_root_label.clone()).success().on_click({
+               self.instance_root_label.button("relocate").on_click({
                     let instance = self.instance.clone();
                     let backend_handle = self.backend_handle.clone();
                     move |_: &ClickEvent, _, cx| {
@@ -894,7 +894,7 @@ impl Render for InstanceSettingsSubpage {
                     }
                 })
             ))
-            .child(Button::new("shortcut").label(ts!("instance.create_shortcut")).success().on_click({
+            .child(Button::new("shortcut").label(ts!("instance.create_shortcut")).overflow_x_hidden().success().on_click({
                 let instance = self.instance.clone();
                 let backend_handle = self.backend_handle.clone();
                 move |_: &ClickEvent, _, cx| {
@@ -922,7 +922,7 @@ impl Render for InstanceSettingsSubpage {
                     }).detach();
                 }
             }))
-            .child(Button::new("delete").label(ts!("instance.delete")).danger().on_click({
+            .child(Button::new("delete").label(ts!("instance.delete")).overflow_x_hidden().danger().on_click({
                 let instance = self.instance.clone();
                 let backend_handle = self.backend_handle.clone();
                 move |click: &ClickEvent, window, cx| {
