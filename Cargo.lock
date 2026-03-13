@@ -682,6 +682,7 @@ dependencies = [
  "ustr",
  "uuid",
  "walkdir",
+ "windows 0.62.2",
  "xmlparser",
 ]
 
