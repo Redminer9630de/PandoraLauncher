@@ -3,7 +3,7 @@ use std::sync::{Arc};
 use bridge::{instance::InstanceID, message::{BridgeDataLoadState, MessageToBackend}, meta::MetadataRequest, serial::AtomicOptionSerial};
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme, Icon, StyledExt, WindowExt, button::{Button, ButtonVariants}, h_flex, notification::NotificationType, skeleton::Skeleton, tab::{Tab, TabBar}, text::TextView, v_flex
+    ActiveTheme, Icon, WindowExt, button::{Button, ButtonVariants}, h_flex, notification::NotificationType, skeleton::Skeleton, tab::{Tab, TabBar}, text::TextView, v_flex
 };
 use rustc_hash::{FxHashMap};
 use schema::{content::ContentSource, loader::Loader, modrinth::{
