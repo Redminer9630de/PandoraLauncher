@@ -12,7 +12,7 @@ use ustr::Ustr;
 use uuid::Uuid;
 
 use crate::{
-    account::Account, game_output::GameOutputLogLevel, import::{ImportFromOtherLaunchers, OtherLauncher}, install::ContentInstall, instance::{
+    account::Account, game_output::GameOutputLogLevel, import::{ImportFromOtherLauncherJob, OtherLauncher}, install::ContentInstall, instance::{
         InstanceContentID, InstanceContentSummary, InstanceID, InstancePlaytime, InstanceServerSummary, InstanceStatus,
         InstanceWorldSummary,
     }, keep_alive::{KeepAlive, KeepAliveHandle}, meta::{MetadataRequest, MetadataResult}, modal_action::ModalAction
@@ -152,8 +152,10 @@ pub enum MessageToBackend {
         instance: InstanceID,
         channel: tokio::sync::oneshot::Sender<LogFiles>,
     },
-    GetImportFromOtherLauncherPaths {
-        channel: tokio::sync::oneshot::Sender<ImportFromOtherLaunchers>,
+    GetImportFromOtherLauncherJob {
+        channel: tokio::sync::oneshot::Sender<Option<ImportFromOtherLauncherJob>>,
+        launcher: OtherLauncher,
+        path: Arc<Path>,
     },
     GetSyncState {
         channel: tokio::sync::oneshot::Sender<SyncState>,
@@ -207,8 +209,7 @@ pub enum MessageToBackend {
     },
     ImportFromOtherLauncher {
         launcher: OtherLauncher,
-        import_accounts: bool,
-        import_instances: bool,
+        import_job: ImportFromOtherLauncherJob,
         modal_action: ModalAction,
     },
     GetAccountSkin {

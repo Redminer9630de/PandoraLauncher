@@ -1,6 +1,6 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
-use bridge::{import::{ImportFromOtherLauncher, ImportFromOtherLaunchers, OtherLauncher}, modal_action::ModalAction};
+use bridge::{import::{ImportFromOtherLauncherJob, OtherLauncher}, modal_action::ModalAction};
 use schema::instance::InstanceConfiguration;
 use crate::{BackendState, launcher_import::{
         modrinth::{import_instances_from_modrinth, read_profiles_from_modrinth_db},
@@ -13,39 +13,56 @@ mod multimc;
 mod modrinth;
 mod atlauncher;
 
-pub fn discover_instances_from_other_launchers() -> ImportFromOtherLaunchers {
-    let mut imports = ImportFromOtherLaunchers::default();
-
-    let Some(base_dirs) = directories::BaseDirs::new() else {
-        return imports;
-    };
-    let data_dir = base_dirs.data_dir();
-
-    let prism_instances = data_dir.join("PrismLauncher").join("instances");
-    imports.imports[OtherLauncher::Prism] = from_subfolders(&prism_instances, &|path| {
-        path.join("instance.cfg").exists() && path.join("mmc-pack.json").exists()
-    });
-
-    let multimc_instances = data_dir.join("multimc").join("instances");
-    imports.imports[OtherLauncher::MultiMC] = from_subfolders(&multimc_instances, &|path| {
-        path.join("instance.cfg").exists() && path.join("mmc-pack.json").exists()
-    });
-
-    if let Ok(import) = read_profiles_from_modrinth_db(data_dir) {
-        imports.imports[OtherLauncher::Modrinth] = import;
+pub fn get_import_from_other_launcher_job(other_launcher: OtherLauncher, path: Arc<Path>) -> Option<ImportFromOtherLauncherJob> {
+    if !path.is_dir() {
+        return None;
     }
+    match other_launcher {
+        OtherLauncher::Prism | OtherLauncher::MultiMC => {
+            if !path.join("prismlauncher.cfg").is_file() && !path.join("multimc.cfg").is_file() {
+                return None;
+            }
+            Some(ImportFromOtherLauncherJob {
+                import_accounts: path.join("accounts.json").is_file(),
+                paths: collect_subfolders_matching(&path.join("instances"), &|path| {
+                    path.join("instance.cfg").exists() && path.join("mmc-pack.json").exists()
+                }),
+                root: path,
+            })
+        },
+        OtherLauncher::Modrinth => {
+            let paths = match read_profiles_from_modrinth_db(&path) {
+                Ok(paths) => paths?,
+                Err(err) => {
+                    log::error!("Unable to read modrinth profile database: {err}");
+                    return None;
+                },
+            };
 
-    let atlauncher_instances = data_dir.join("atlauncher").join("instances");
-    imports.imports[OtherLauncher::ATLauncher] = from_subfolders(&atlauncher_instances, &|path| {
-        path.join("instance.json").exists()
-    });
-
-    imports
+            Some(ImportFromOtherLauncherJob {
+                import_accounts: false,
+                paths,
+                root: path,
+            })
+        },
+        OtherLauncher::ATLauncher => {
+            if !path.join("configs/ATLauncher.json").is_file() {
+                return None;
+            }
+            Some(ImportFromOtherLauncherJob {
+                import_accounts: path.join("configs/accounts.json").is_file(),
+                paths: collect_subfolders_matching(&path.join("instances"), &|path| {
+                    path.join("instance.json").exists()
+                }),
+                root: path,
+            })
+        },
+    }
 }
 
-fn from_subfolders(folder: &Path, check: &dyn Fn(&Path) -> bool) -> Option<ImportFromOtherLauncher> {
+fn collect_subfolders_matching(folder: &Path, check: &dyn Fn(&Path) -> bool) -> Vec<Arc<Path>> {
     let Ok(read_dir) = std::fs::read_dir(folder) else {
-        return None;
+        return Vec::new();
     };
     let mut paths = Vec::new();
     for entry in read_dir {
@@ -59,12 +76,9 @@ fn from_subfolders(folder: &Path, check: &dyn Fn(&Path) -> bool) -> Option<Impor
         if !(check)(&path) {
             continue;
         }
-        paths.push(path);
+        paths.push(path.into());
     }
-    Some(ImportFromOtherLauncher {
-        can_import_accounts: true,
-        paths,
-    })
+    paths
 }
 
 pub fn try_load_from_other_launcher_formats(folder: &Path) -> Option<InstanceConfiguration> {
@@ -77,33 +91,20 @@ pub fn try_load_from_other_launcher_formats(folder: &Path) -> Option<InstanceCon
     None
 }
 
-pub async fn import_from_other_launcher(backend: &BackendState, launcher: OtherLauncher, import_accounts: bool, import_instances: bool, modal_action: ModalAction) {
-    let Some(base_dirs) = directories::BaseDirs::new() else {
-        return;
-    };
-    let data_dir = base_dirs.data_dir();
+pub async fn import_from_other_launcher(backend: &BackendState, launcher: OtherLauncher, import_job: ImportFromOtherLauncherJob, modal_action: ModalAction) {
 
     match launcher {
-        OtherLauncher::Prism => {
-            let prism = data_dir.join("PrismLauncher");
-            import_from_multimc(backend, &prism, import_accounts, import_instances, modal_action).await;
+        OtherLauncher::Prism | OtherLauncher::MultiMC => {
+            import_from_multimc(backend, import_job, modal_action).await;
         },
         OtherLauncher::Modrinth => {
-            if import_instances {
-                let modrinth = data_dir.join("ModrinthApp");
-                if let Err(err) = import_instances_from_modrinth(backend, &modrinth, &modal_action) {
-                    log::error!("Sqlite error while importing from modrinth: {err}");
-                    modal_action.set_error_message("Sqlite error while importing from modrinth, see logs for more info".into());
-                }
+            if let Err(err) = import_instances_from_modrinth(backend, import_job, &modal_action) {
+                log::error!("Sqlite error while importing from modrinth: {err}");
+                modal_action.set_error_message("Sqlite error while importing from modrinth, see logs for more info".into());
             }
         },
-        OtherLauncher::MultiMC => {
-            let multimc = data_dir.join("multimc");
-            import_from_multimc(backend, &multimc, import_accounts, import_instances, modal_action).await;
-        },
         OtherLauncher::ATLauncher => {
-            let atlauncher = data_dir.join("atlauncher");
-             import_from_atlauncher(backend, &atlauncher, import_accounts, import_instances, modal_action).await;
+            import_from_atlauncher(backend, import_job, modal_action).await;
         }
     }
 }

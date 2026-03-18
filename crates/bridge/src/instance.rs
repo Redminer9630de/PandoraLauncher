@@ -3,7 +3,6 @@ use std::{path::Path, sync::Arc};
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use schema::{auxiliary::AuxDisabledChildren, content::ContentSource, curseforge::{CachedCurseforgeFileInfo, CurseforgeModpackFile, CurseforgeModpackMinecraft}, loader::Loader, modification::ModrinthModpackFileDownload, text_component::FlatTextComponent};
-use ustr::Ustr;
 
 use crate::safe_path::SafePath;
 

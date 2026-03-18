@@ -1055,8 +1055,8 @@ impl BackendState {
                     }
                 }
             },
-            MessageToBackend::GetImportFromOtherLauncherPaths { channel } => {
-                let result = crate::launcher_import::discover_instances_from_other_launchers();
+            MessageToBackend::GetImportFromOtherLauncherJob { channel, launcher, path } => {
+                let result = crate::launcher_import::get_import_from_other_launcher_job(launcher, path);
                 _ = channel.send(result);
             },
             MessageToBackend::GetSyncState { channel } => {
@@ -1491,8 +1491,8 @@ impl BackendState {
             MessageToBackend::InstallUpdate { update, modal_action } => {
                 tokio::task::spawn(crate::update::install_update(self.redirecting_http_client.clone(), self.directories.clone(), self.send.clone(), update, modal_action));
             },
-            MessageToBackend::ImportFromOtherLauncher { launcher, import_accounts, import_instances, modal_action } => {
-                crate::launcher_import::import_from_other_launcher(self, launcher, import_accounts, import_instances, modal_action).await;
+            MessageToBackend::ImportFromOtherLauncher { launcher, import_job, modal_action } => {
+                crate::launcher_import::import_from_other_launcher(self, launcher, import_job, modal_action).await;
             },
             MessageToBackend::GetAccountSkin { account, result } => {
                 let backend = self.clone();

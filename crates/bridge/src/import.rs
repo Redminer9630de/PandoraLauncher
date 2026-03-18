@@ -1,15 +1,11 @@
-use std::path::PathBuf;
+use std::{path::Path, sync::Arc};
 use strum::{Display, EnumIter};
 
-#[derive(Default, Debug)]
-pub struct ImportFromOtherLaunchers {
-    pub imports: enum_map::EnumMap<OtherLauncher, Option<ImportFromOtherLauncher>>,
-}
-
 #[derive(Debug)]
-pub struct ImportFromOtherLauncher {
-    pub can_import_accounts: bool,
-    pub paths: Vec<PathBuf>,
+pub struct ImportFromOtherLauncherJob {
+    pub import_accounts: bool,
+    pub root: Arc<Path>,
+    pub paths: Vec<Arc<Path>>,
 }
 
 #[derive(Debug, Display, Clone, Copy, enum_map::Enum, EnumIter)]
@@ -18,4 +14,15 @@ pub enum OtherLauncher {
     Modrinth,
     MultiMC,
     ATLauncher,
+}
+
+impl OtherLauncher {
+    pub fn default_path(&self, data_dir: &Path) -> Arc<Path> {
+        match self {
+            OtherLauncher::Prism => data_dir.join("PrismLauncher").into(),
+            OtherLauncher::Modrinth => data_dir.join("ModrinthApp").into(),
+            OtherLauncher::MultiMC => data_dir.join("multimc").into(),
+            OtherLauncher::ATLauncher => data_dir.join("atlauncher").into(),
+        }
+    }
 }

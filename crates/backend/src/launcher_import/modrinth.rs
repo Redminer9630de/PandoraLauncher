@@ -1,27 +1,29 @@
-use std::{io::Cursor, path::{Path, PathBuf}};
+use std::{io::Cursor, path::{Path, PathBuf}, sync::Arc};
 
-use bridge::{import::ImportFromOtherLauncher, modal_action::{ModalAction, ProgressTracker}, safe_path::SafePath};
+use bridge::{import::ImportFromOtherLauncherJob, modal_action::{ModalAction, ProgressTracker}};
 use image::ImageFormat;
+use rustc_hash::FxHashMap;
 use schema::{instance::InstanceConfiguration, loader::Loader};
 
 use crate::BackendState;
-
 
 struct ModrinthInstanceToImport {
     pandora_path: PathBuf,
     instance_configuration: InstanceConfiguration,
     icon_path: Option<String>,
-    minecraft_folder: PathBuf,
+    minecraft_folder: Arc<Path>,
 }
 
-pub fn import_instances_from_modrinth(backend: &BackendState, modrinth: &Path, modal_action: &ModalAction) -> rusqlite::Result<()> {
+pub fn import_instances_from_modrinth(backend: &BackendState, import_job: ImportFromOtherLauncherJob, modal_action: &ModalAction) -> rusqlite::Result<()> {
+    if import_job.paths.is_empty() {
+        return Ok(());
+    }
+
     let all_tracker = ProgressTracker::new("Importing instances".into(), backend.send.clone());
     modal_action.trackers.push(all_tracker.clone());
     all_tracker.notify();
 
-    let profiles = modrinth.join("profiles");
-    let app_db = modrinth.join("app.db");
-
+    let app_db = import_job.root.join("app.db");
     if !app_db.exists() {
         return Ok(());
     }
@@ -33,15 +35,28 @@ pub fn import_instances_from_modrinth(backend: &BackendState, modrinth: &Path, m
 
     let mut to_import = Vec::new();
 
-    while let Ok(Some(row)) = query.next() {
-        let path: String = row.get(0)?;
+    let mut name_to_path = FxHashMap::default();
+    for path in import_job.paths.iter() {
+        let Some(file_name) = path.file_name() else {
+            continue;
+        };
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        name_to_path.insert(file_name.to_string(), path.clone());
+    }
 
-        if SafePath::new(&path).is_none() {
-            modal_action.set_error_message(format!("Refusing to load instance with illegal path: {}", path).into());
-            return Ok(());
+    while let Ok(Some(row)) = query.next() {
+        let filename: String = row.get(0)?;
+
+        let pandora_path = backend.directories.instances_dir.join(&filename);
+        if pandora_path.exists() {
+           continue;
         }
 
-        let profile = profiles.join(&path);
+        let Some(profile) = name_to_path.get(&filename) else {
+            continue;
+        };
         if !profile.is_dir() {
             continue;
         }
@@ -58,10 +73,10 @@ pub fn import_instances_from_modrinth(backend: &BackendState, modrinth: &Path, m
         let instance_configuration = InstanceConfiguration::new(game_version.into(), loader);
 
         to_import.push(ModrinthInstanceToImport {
-            pandora_path: backend.directories.instances_dir.join(path),
+            pandora_path,
             instance_configuration,
             icon_path,
-            minecraft_folder: profile,
+            minecraft_folder: profile.clone(),
         });
     }
 
@@ -127,9 +142,7 @@ pub fn import_instances_from_modrinth(backend: &BackendState, modrinth: &Path, m
     Ok(())
 }
 
-pub fn read_profiles_from_modrinth_db(data_dir: &Path) -> rusqlite::Result<Option<ImportFromOtherLauncher>> {
-    let modrinth = data_dir.join("ModrinthApp");
-    let profiles = modrinth.join("profiles");
+pub fn read_profiles_from_modrinth_db(modrinth: &Path) -> rusqlite::Result<Option<Vec<Arc<Path>>>> {
     let app_db = modrinth.join("app.db");
 
     if !app_db.exists() {
@@ -143,16 +156,14 @@ pub fn read_profiles_from_modrinth_db(data_dir: &Path) -> rusqlite::Result<Optio
 
     let mut paths = Vec::new();
 
+    let profiles = modrinth.join("profiles");
     while let Ok(Some(row)) = query.next() {
         let path: String = row.get(0)?;
         let profile = profiles.join(path);
         if profile.is_dir() {
-            paths.push(profile);
+            paths.push(profile.into());
         }
     }
 
-    Ok(Some(ImportFromOtherLauncher {
-        can_import_accounts: false,
-        paths,
-    }))
+    Ok(Some(paths))
 }

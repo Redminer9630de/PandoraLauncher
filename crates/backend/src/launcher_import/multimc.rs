@@ -1,7 +1,7 @@
 use std::{path::{Path, PathBuf}, sync::Arc};
 
 use auth::{credentials::AccountCredentials, models::{TokenWithExpiry, XstsToken}, secret::PlatformSecretStorage};
-use bridge::modal_action::{ModalAction, ProgressTracker};
+use bridge::{import::ImportFromOtherLauncherJob, modal_action::{ModalAction, ProgressTracker}};
 use chrono::DateTime;
 use schema::{instance::{InstanceConfiguration, LwjglLibraryPath}, loader::Loader};
 use serde::Deserialize;
@@ -246,21 +246,21 @@ struct MultiMCAccountTokenExtra {
     uhs: Option<Arc<str>>,
 }
 
-pub async fn import_from_multimc(backend: &BackendState, path: &Path, import_accounts: bool, import_instances: bool, modal_action: ModalAction) {
-    if import_accounts {
-        import_accounts_from_multimc(backend, path, &modal_action).await;
-    }
-    if import_instances {
-        import_instances_from_multimc(backend, path, &modal_action);
-    }
+pub async fn import_from_multimc(backend: &BackendState, import_job: ImportFromOtherLauncherJob, modal_action: ModalAction) {
+    import_accounts_from_multimc(backend, &import_job, &modal_action).await;
+    import_instances_from_multimc(backend, &import_job, &modal_action);
 }
 
-async fn import_accounts_from_multimc(backend: &BackendState, path: &Path, modal_action: &ModalAction) {
+async fn import_accounts_from_multimc(backend: &BackendState, import_job: &ImportFromOtherLauncherJob, modal_action: &ModalAction) {
+    if !import_job.import_accounts {
+        return;
+    }
+
     let tracker = ProgressTracker::new("Reading accounts.json".into(), backend.send.clone());
     modal_action.trackers.push(tracker.clone());
     tracker.notify();
 
-    let accounts_path = path.join("accounts.json");
+    let accounts_path = import_job.root.join("accounts.json");
     let Ok(accounts_bytes) = std::fs::read(&accounts_path) else {
         return;
     };
@@ -389,27 +389,21 @@ struct MultiMCInstanceToImport {
     pandora_path: PathBuf,
     multimc_instance_cfg: PathBuf,
     multimc_mmc_pack: PathBuf,
-    folder: PathBuf,
+    folder: Arc<Path>,
 }
 
-fn import_instances_from_multimc(backend: &BackendState, path: &Path, modal_action: &ModalAction) {
+fn import_instances_from_multimc(backend: &BackendState, import_job: &ImportFromOtherLauncherJob, modal_action: &ModalAction) {
+    if import_job.paths.is_empty() {
+        return;
+    }
+
     let all_tracker = ProgressTracker::new("Importing instances".into(), backend.send.clone());
     modal_action.trackers.push(all_tracker.clone());
     all_tracker.notify();
 
-    let Ok(read_dir) = std::fs::read_dir(path.join("instances")) else {
-        all_tracker.set_finished(bridge::modal_action::ProgressTrackerFinishType::Error);
-        all_tracker.notify();
-        return;
-    };
-
     let mut to_import = Vec::new();
 
-    for entry in read_dir {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        let folder = entry.path();
+    for folder in import_job.paths.iter() {
         if !folder.is_dir() {
             continue;
         }
@@ -433,7 +427,7 @@ fn import_instances_from_multimc(backend: &BackendState, path: &Path, modal_acti
             pandora_path,
             multimc_instance_cfg,
             multimc_mmc_pack,
-            folder,
+            folder: folder.clone(),
         });
     }
 
