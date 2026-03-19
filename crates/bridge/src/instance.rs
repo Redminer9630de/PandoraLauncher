@@ -1,8 +1,8 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
-use schema::{auxiliary::AuxDisabledChildren, content::ContentSource, curseforge::{CachedCurseforgeFileInfo, CurseforgeModpackFile, CurseforgeModpackMinecraft}, loader::Loader, modification::ModrinthModpackFileDownload, text_component::FlatTextComponent};
+use schema::{auxiliary::AuxDisabledChildren, content::ContentSource, curseforge::{CachedCurseforgeFileInfo, CurseforgeModpackFile, CurseforgeModpackMinecraft}, loader::Loader, modification::ModrinthModpackFileDownload, server_status::ServerStatus, text_component::FlatTextComponent};
 
 use crate::safe_path::SafePath;
 
@@ -64,6 +64,9 @@ pub struct InstanceServerSummary {
     pub name: Arc<str>,
     pub ip: Arc<str>,
     pub png_icon: Option<Arc<[u8]>>,
+    pub pinging: bool,
+    pub status: Option<Arc<ServerStatus>>,
+    pub ping: Option<Duration>,
 }
 
 #[derive(Debug, Clone)]

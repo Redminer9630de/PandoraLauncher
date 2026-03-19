@@ -24,7 +24,7 @@ use tokio::sync::{OnceCell, Semaphore, mpsc::Receiver};
 use uuid::Uuid;
 
 use crate::{
-    account::{BackendAccountInfo, MinecraftLoginInfo}, directories::LauncherDirectories, id_slab::IdSlab, instance::{ContentFolder, Instance}, launch::Launcher, metadata::{items::{CurseforgeGetFilesMetadataItem, MinecraftVersionManifestMetadataItem}, manager::MetadataManager}, mod_metadata::ModMetadataManager, persistent::Persistent, skin_manager::SkinManager
+    account::{BackendAccountInfo, MinecraftLoginInfo}, directories::LauncherDirectories, id_slab::IdSlab, instance::{ContentFolder, Instance}, launch::Launcher, metadata::{items::{CurseforgeGetFilesMetadataItem, MinecraftVersionManifestMetadataItem}, manager::MetadataManager}, mod_metadata::ModMetadataManager, persistent::Persistent, server_list_pinger::ServerListPinger, skin_manager::SkinManager
 };
 
 fn build_http_clients(user_agent: &str, proxy_config: &ProxyConfig, proxy_password: Option<&str>) -> (reqwest::Client, reqwest::Client) {
@@ -146,6 +146,7 @@ pub fn start(launcher_dir: PathBuf, send: FrontendHandle, self_handle: BackendHa
         login_semaphore: Arc::new(Semaphore::new(1)),
         cached_minecraft_profiles: Default::default(),
         skin_manager: Default::default(),
+        server_list_pinger: Arc::new(ServerListPinger::new()),
     };
 
     log::debug!("Doing initial backend load");
@@ -203,6 +204,7 @@ pub struct BackendState {
     pub login_semaphore: Arc<Semaphore>,
     pub cached_minecraft_profiles: Arc<RwLock<FxHashMap<Uuid, CachedMinecraftProfile>>>,
     pub skin_manager: Arc<RwLock<SkinManager>>,
+    pub server_list_pinger: Arc<ServerListPinger>,
 }
 
 pub struct CachedMinecraftProfile {

@@ -8,7 +8,7 @@ use bridge::{
 };
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, IndexPath, Theme, button::{Button, ButtonVariants}, h_flex, list::{ListDelegate, ListItem, ListState}, v_flex
+    ActiveTheme as _, Colorize, IndexPath, Theme, button::{Button, ButtonVariants}, h_flex, list::{ListDelegate, ListItem, ListState}, v_flex
 };
 
 use crate::{
@@ -303,12 +303,12 @@ impl ListDelegate for ServersListDelegate {
     fn render_item(
         &mut self,
         ix: IndexPath,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let interface_config = InterfaceConfig::get(cx);
 
-        let interface_config_hide_server_addresses = interface_config.hide_server_addresses;
+        let hide_server_addresses = interface_config.hide_server_addresses;
 
         let summary = self.searched.get(ix.row)?;
 
@@ -318,16 +318,72 @@ impl ListDelegate for ServersListDelegate {
             gpui::img(ImageSource::Resource(Resource::Embedded("images/default_world.png".into())))
         };
 
-        let description = v_flex().child(SharedString::from(summary.name.clone())).when(
-            !interface_config_hide_server_addresses,
-            |parent| {
-                parent.child(
-                    div()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(SharedString::from(summary.ip.clone())),
-                )
-            },
-        );
+        let ip_text: SharedString = if hide_server_addresses {
+            "".into()
+        } else {
+            format!("({})", summary.ip).into()
+        };
+        let theme = cx.theme();
+        let description = v_flex()
+            .min_w_0()
+            .w(px(542.0))
+            .max_w(px(542.0))
+            .gap_2()
+            .line_height(rems(1.0))
+            .overflow_x_hidden()
+            .child(h_flex()
+                .gap_2()
+                .child(SharedString::from(summary.name.clone()))
+                .child(div()
+                    .flex_1()
+                    .text_color(theme.muted_foreground)
+                    .child(ip_text))
+                .when_some(summary.status.as_ref(), |this, status| {
+                    if let Some(players) = &status.players {
+                        this.child(div()
+                            .text_color(theme.muted_foreground)
+                            .child(format!("{}/{}", players.online, players.max)))
+                    } else {
+                        this.child(div()
+                            .text_color(theme.muted_foreground)
+                            .child("???"))
+                    }
+                })
+                .when_some(summary.ping.as_ref(), |this, ping| {
+                    let millis = ping.as_millis();
+
+                    let color = if millis < 25 {
+                        theme.success
+                    } else if millis < 175 {
+                        theme.warning.mix_oklab(theme.success, (millis-25) as f32 / 150.0)
+                    } else if millis < 575 {
+                        theme.danger.mix_oklab(theme.warning, (millis-175) as f32 / 400.0)
+                    } else {
+                        theme.danger
+                    };
+
+                    this.child(div().text_color(color).child(format!("{}ms", millis)))
+                })
+                .when(summary.status.is_none() && summary.pinging, |this| {
+                    this.child("Pinging...")
+                })
+            )
+            .when_some(summary.status.as_ref(), |this, status| {
+                this.child(div()
+                    .whitespace_nowrap()
+                    .line_clamp(2)
+                    .h(rems(2.0))
+                    .text_2xl()
+                    .font_family("Minecraft Default")
+                    .child(crate::component::create_styled_text(&status.description, false)))
+            })
+            .when(summary.status.is_none() && !summary.pinging, |this| {
+                this.child(div()
+                    .whitespace_nowrap()
+                    .text_color(theme.danger)
+                    .h(rems(2.0))
+                    .child("Unable to get server status"))
+            });
 
         let id = self.id;
         let name = self.name.clone();

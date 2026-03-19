@@ -680,52 +680,7 @@ impl ListDelegate for ContentListDelegate {
 fn create_descriptions(name: Option<Arc<str>>, version: Arc<str>, authors: Arc<str>, rich_description: Option<Arc<FlatTextComponent>>, grayscale: bool, filename: Arc<str>, secondary: Hsla) -> (Div, Option<Div>) {
     if name.is_none() && authors.is_empty() {
         if let Some(rich_description) = rich_description {
-            let styled_text = StyledText::new(&rich_description.content)
-                .with_highlights(rich_description.runs.iter().map(|run| {
-                    (
-                        run.range.clone(),
-                        HighlightStyle {
-                            color: run.style.colour.map(|rgb| {
-                                let hsla: Hsla = gpui::rgb(rgb).into();
-                                if grayscale {
-                                    hsla.grayscale()
-                                } else {
-                                    hsla
-                                }
-                            }),
-                            font_weight: run.style.bold.map(|bold| {
-                                if bold {
-                                    FontWeight::BOLD
-                                } else {
-                                    FontWeight::NORMAL
-                                }
-                            }),
-                            font_style: run.style.italic.map(|italic| {
-                                if italic {
-                                    FontStyle::Normal
-                                } else {
-                                    FontStyle::Italic
-                                }
-                            }),
-                            background_color: None,
-                            underline: run.style.underlined.map(|underline| {
-                                if underline {
-                                    UnderlineStyle::default()
-                                } else {
-                                    UnderlineStyle { thickness: px(1.0), ..Default::default() }
-                                }
-                            }),
-                            strikethrough: run.style.strikethrough.map(|strikethrough| {
-                                if strikethrough {
-                                    StrikethroughStyle::default()
-                                } else {
-                                    StrikethroughStyle { thickness: px(1.0), ..Default::default() }
-                                }
-                            }),
-                            fade_out: None,
-                        }
-                    )
-                }));
+            let styled_text = super::create_styled_text(&*rich_description, grayscale);
 
             let description1 = v_flex()
                 .min_w_2_5()

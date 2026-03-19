@@ -19,7 +19,7 @@ use thiserror::Error;
 
 use ustr::Ustr;
 
-use crate::{BackendState, BackendStateFileWatching, FolderChanges, IoOrSerializationError, WatchTarget, id_slab::{GetId, Id}, launcher_import, mod_metadata::{ContentUpdateAction, ContentUpdateKey, ModMetadataManager}, persistent::Persistent};
+use crate::{BackendState, BackendStateFileWatching, FolderChanges, IoOrSerializationError, WatchTarget, id_slab::{GetId, Id}, launcher_import, mod_metadata::{ContentUpdateAction, ContentUpdateKey, ModMetadataManager}, persistent::Persistent, server_list_pinger::{PingResult, ServerListPinger}};
 
 #[derive(Debug)]
 pub struct Instance {
@@ -411,8 +411,10 @@ impl Instance {
                     return Some(last.clone());
                 } else {
                     let server_dat_path = this.server_dat_path.clone();
+                    let backend = backend.clone();
+                    let instance_id = this.id;
                     tokio::task::spawn_blocking(move || {
-                        Self::load_servers_all(&server_dat_path)
+                        Self::load_servers_all(&server_dat_path, &backend, instance_id)
                     })
                 };
 
@@ -448,14 +450,14 @@ impl Instance {
         }.boxed()
     }
 
-    fn load_servers_all(server_dat_path: &Path) -> Arc<[InstanceServerSummary]> {
+    fn load_servers_all(server_dat_path: &Path, backend: &Arc<BackendState>, instance: InstanceID) -> Arc<[InstanceServerSummary]> {
         log::info!("Loading servers from {:?}", server_dat_path);
 
         if !server_dat_path.is_file() {
             return Arc::from([]);
         }
 
-        let result = match load_servers_summary(&server_dat_path) {
+        let result = match load_servers_summary(&server_dat_path, backend, instance) {
             Ok(summaries) => summaries.into(),
             Err(err) => {
                 log::error!("Error loading servers: {:?}", err);
@@ -1072,7 +1074,7 @@ fn load_world_summary(path: &Path) -> anyhow::Result<InstanceWorldSummary> {
     })
 }
 
-fn load_servers_summary(server_dat_path: &Path) -> anyhow::Result<Vec<InstanceServerSummary>> {
+fn load_servers_summary(server_dat_path: &Path, backend: &Arc<BackendState>, instance: InstanceID) -> anyhow::Result<Vec<InstanceServerSummary>> {
     let raw = std::fs::read(server_dat_path)?;
 
     let mut nbt_data = raw.as_slice();
@@ -1096,19 +1098,41 @@ fn load_servers_summary(server_dat_path: &Path) -> anyhow::Result<Vec<InstanceSe
             continue;
         };
 
+        let ip: Arc<str> = ip.as_str().into();
+        let result = ServerListPinger::load_status(backend, ip.clone(), instance);
+        let (pinging, status, ping) = match result {
+            PingResult::Pinging => (true, None, None),
+            PingResult::Loaded { status, ping } => (false, Some(status), ping),
+            PingResult::Error => (false, None, None),
+        };
+
         let name: Arc<str> = server
             .find_string("name")
             .map(|v| Arc::from(v.as_str()))
             .unwrap_or_else(|| Arc::from("<unnamed>"));
 
-        let icon = server
-            .find_string("icon")
-            .and_then(|v| base64::engine::general_purpose::STANDARD.decode(v).map(Arc::from).ok());
+        let mut icon: Option<Arc<[u8]>> = if let Some(status) = &status
+            && let Some(icon) = &status.favicon
+            && let Some(base64) = icon.strip_prefix("data:image/png;base64,")
+        {
+            base64::engine::general_purpose::STANDARD.decode(base64.replace('\n', "")).map(Arc::from).ok()
+        } else {
+            None
+        };
+
+        if icon.is_none() {
+            icon = server
+                .find_string("icon")
+                .and_then(|v| base64::engine::general_purpose::STANDARD.decode(v).map(Arc::from).ok());
+        }
 
         summaries.push(InstanceServerSummary {
             name,
-            ip: Arc::from(ip.as_str()),
+            ip,
             png_icon: icon,
+            pinging,
+            status,
+            ping,
         });
     }
 

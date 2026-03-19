@@ -28,6 +28,7 @@ mod metadata;
 mod mod_metadata;
 mod id_slab;
 mod persistent;
+mod server_list_pinger;
 mod shortcut;
 mod skin_manager;
 mod syncing;

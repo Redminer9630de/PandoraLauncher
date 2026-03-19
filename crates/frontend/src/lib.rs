@@ -108,6 +108,7 @@ pub fn start(
         let _ = cx.text_system().add_fonts(vec![
             Assets.load("fonts/inter/Inter-Regular.ttf").unwrap().unwrap(),
             Assets.load("fonts/roboto-mono/RobotoMono-Regular.ttf").unwrap().unwrap(),
+            Assets.load("fonts/minecraft.ttf").unwrap().unwrap(),
         ]);
 
         gpui_component::init(cx);
