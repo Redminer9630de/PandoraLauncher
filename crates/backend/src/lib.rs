@@ -346,7 +346,7 @@ pub fn rename_with_fallback_across_devices(from: &Path, to: &Path) -> std::io::R
                 std::fs::copy(from, to)?;
                 _ = std::fs::remove_file(from);
             } else {
-                return Err(Error::new(ErrorKind::Other, format!("{from} is not a symlink, file or folder")));
+                return Err(Error::new(ErrorKind::Other, format!("{from:?} is not a symlink, file or folder")));
             }
             return Ok(());
         }
