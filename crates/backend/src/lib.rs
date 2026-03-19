@@ -1,7 +1,7 @@
 #![deny(unused_must_use)]
 
 mod backend;
-use std::{ffi::{OsStr, OsString}, io::{ErrorKind, Write}, path::{Path, PathBuf}, sync::Arc};
+use std::{ffi::{OsStr, OsString}, io::{Error, ErrorKind, Write}, path::{Path, PathBuf}, sync::Arc};
 
 pub use backend::*;
 use bridge::instance::InstanceContentSummary;
@@ -228,7 +228,7 @@ pub fn copy_content_recursive(from: &Path, to: &Path) -> std::io::Result<()> {
             let path = entry.path();
             let file_type = entry.file_type()?;
             let Ok(relative) = path.strip_prefix(&from) else {
-                return Err(ErrorKind::Other.into());
+                return Err(Error::new(ErrorKind::Other, format!("{path:?} is not a child of {from:?}")));
             };
             if file_type.is_symlink() {
                 let target = std::fs::read_link(&path)?;
@@ -272,7 +272,8 @@ pub fn copy_content_recursive(from: &Path, to: &Path) -> std::io::Result<()> {
         copied_bytes += std::fs::copy(copy_from, dest)?;
     }
     if copied_bytes != total_bytes {
-        return Err(ErrorKind::Interrupted.into());
+        return Err(Error::new(ErrorKind::Other,
+            format!("Expected copy size did not match. Expected to copy {total_bytes} bytes, copied {copied_bytes} instead")));
     }
     for (relative, internal) in internal_symlinks {
         let dest = to.join(relative);
@@ -345,7 +346,7 @@ pub fn rename_with_fallback_across_devices(from: &Path, to: &Path) -> std::io::R
                 std::fs::copy(from, to)?;
                 _ = std::fs::remove_file(from);
             } else {
-                return Err(ErrorKind::InvalidInput.into());
+                return Err(Error::new(ErrorKind::Other, format!("{from} is not a symlink, file or folder")));
             }
             return Ok(());
         }
